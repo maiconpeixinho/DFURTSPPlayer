@@ -218,47 +218,57 @@ initError:
 {
 	// AVPacket packet;
     int frameFinished=0;
-
-    while (!frameFinished && av_read_frame(pFormatCtx, &packet) >=0 ) {
-        // Is this a packet from the video stream?
-        if(packet.stream_index==videoStream) {
-            // Decode video frame
-            avcodec_decode_video2(pCodecCtx, pFrame, &frameFinished, &packet);
-        }
-        
-        if (packet.stream_index==audioStream) {
-            // NSLog(@"audio stream");
-            [audioPacketQueueLock lock];
-            
-            audioPacketQueueSize += packet.size;
-            [audioPacketQueue addObject:[NSMutableData dataWithBytes:&packet length:sizeof(packet)]];
-            
-            [audioPacketQueueLock unlock];
-            
-            if (!primed) {
-                primed=YES;
-                [_audioController _startAudio];
-            }
-            
-            if (emptyAudioBuffer) {
-                [_audioController enqueueBuffer:emptyAudioBuffer];
-            }
-        }
-	}
-    
+	@try {
+	    while (!frameFinished && av_read_frame(pFormatCtx, &packet) >=0 ) {
+	        // Is this a packet from the video stream?
+	        if(packet.stream_index==videoStream) {
+	            // Decode video frame
+	            avcodec_decode_video2(pCodecCtx, pFrame, &frameFinished, &packet);
+	        }
+	        
+	        if (packet.stream_index==audioStream) {
+	            // NSLog(@"audio stream");
+	            [audioPacketQueueLock lock];
+	            
+	            audioPacketQueueSize += packet.size;
+	            [audioPacketQueue addObject:[NSMutableData dataWithBytes:&packet length:sizeof(packet)]];
+	            
+	            [audioPacketQueueLock unlock];
+	            
+	            if (!primed) {
+	                primed=YES;
+	                [_audioController _startAudio];
+	            }
+	            
+	            if (emptyAudioBuffer) {
+	                [_audioController enqueueBuffer:emptyAudioBuffer];
+	            }
+	        }
+		}
+    }
+    @catch (NSException *exception) {
+        frameFinished = 0;
+        NSLog(@"avcodec_decode_video2 %@", exception);
+    }
 	return frameFinished!=0;
 }
 
 - (void)convertFrameToRGB
 {
     if(img_convert_ctx != NULL){
-        sws_scale(img_convert_ctx,
-                  (const uint8_t *const *)pFrame->data,
-                  pFrame->linesize,
-                  0,
-                  pCodecCtx->height,
-                  picture.data,
-                  picture.linesize);
+	    @try {
+	        sws_scale(img_convert_ctx,
+	                  (const uint8_t *const *)pFrame->data,
+	                  pFrame->linesize,
+	                  0,
+	                  pCodecCtx->height,
+	                  picture.data,
+	                  picture.linesize);
+	    }
+	    @catch (NSException *exception) {
+	        //Crashed: com.apple.root.usr-initiated-qos EXC_BAD_ACCESS KERN_PROTECTION_FAILURE at 0x3aa93890
+	        NSLog(@"Frame record error %@", exception);
+	    }
     }
 }
 
